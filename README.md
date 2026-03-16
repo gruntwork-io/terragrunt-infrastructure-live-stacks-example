@@ -158,35 +158,41 @@ Before you start provisioning the infrastructure in this repository, you'll want
 2. Run the following to generate the relevant units for the stack, and run a plan against them.
 
    ```bash
-   terragrunt stack run plan
+   terragrunt run --all --non-interactive --bootstrap-backend plan
    ```
+
+   > [!TIP]
+   >
+   > The `--bootstrap-backend` flag there allows Terragrunt to automatically create relevant backend resources for you before running OpenTofu.
+   >
+   > You don't need to use the flag if you are using backend resources that already exist, or don't want Terragrunt to create them for you.
 
 3. If the plan looks good, run the following to apply the changes.
 
    ```bash
-   terragrunt stack run apply
+   terragrunt run --all --non-interactive apply
    ```
 
 ### Provisioning all stacks
 
-If you want to provision all the stacks in this repository, you can do the following:
+If you want to provision all the stacks in this repository, you can do the same at the root of the repository.
 
-1. Generate all units for all stacks from the root of the repository.
+1. Navigate back up to the root of the repository.
 
    ```bash
-   terragrunt stack generate
+   cd ../../..
    ```
 
 2. Plan all units.
 
    ```bash
-   terragrunt run --all plan
+   terragrunt run --all --non-interactive plan
    ```
 
 3. Apply all units.
 
    ```bash
-   terragrunt run --all apply
+   terragrunt run --all --non-interactive apply
    ```
 
 ## Interacting with the provisioned infrastructure
@@ -288,15 +294,6 @@ The `resources` directory can be arbitrarily deep, and can be used to organize r
 
 The contents of the `root.hcl` file is configuration that is common to all units the repository. It's idiomatic Terragrunt code to always include this root file in every unit. There's very frequently some boilerplate configuration like defining the OpenTofu provider, setting state backend configurations, etc. that have to be repeated in every unit, so it's nice to have it defined once in the root file, and included in every unit.
 
-As you can see in the `inputs` attribute, these values are also exposed to the units, so they're accessible to the units as well, should they need them:
-
-```hcl
-inputs = merge(
-  local.account_vars.locals,
-  local.region_vars.locals,
-)
-```
-
 Avoid overloading this file with too much configuration, as it might not be the right level of abstraction for the configuration you need. Instead, prefer to use `terragrunt.stack.hcl` files to define configurations in `values` attributes, and pass down the values to the stacks and units that need them.
 
 ### `terragrunt.stack.hcl`
@@ -305,7 +302,7 @@ The `terragrunt.stack.hcl` file is used to define configurations for a stack of 
 
 Using the `values` attribute of [stack](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#stack) and [unit](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#unit) configuration blocks allows you to pass down configuration to units with granular control.
 
-For example, take this portion of [prod/us-east-1/stateful-ec2-asg-service/terragrunt.stack.hcl](prod/us-east-1/stateful-ec2-asg-service/terragrunt.stack.hcl) file:
+For example, consider this portion of the [prod/us-east-1/stateful-ec2-asg-service/terragrunt.stack.hcl](prod/us-east-1/stateful-ec2-asg-service/terragrunt.stack.hcl) file:
 
 ```hcl
 unit "service" {
@@ -348,7 +345,7 @@ Here, you can see that the `values` attribute is setting exactly the values that
 
 When you run `terragrunt` commands you may find that `.terraform.lock.hcl` files are created in your working directories.
 
-These files are intentionally not committed to this example repository, but you definitely should in your own repositories!
+These files are intentionally not committed to this example repository, but definitely should be in your own repositories!
 
 They help make sure that your IaC results in reproducible infrastructure. For more on this, read [Lock File Handling docs](https://terragrunt.gruntwork.io/docs/features/lock-file-handling/).
 
