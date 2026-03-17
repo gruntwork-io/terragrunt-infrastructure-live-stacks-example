@@ -127,7 +127,7 @@ Before you start provisioning the infrastructure in this repository, you'll want
        # ^^^^^ Replace this ^^^^^^
        key            = "${path_relative_to_include()}/tf.tfstate"
        region         = local.aws_region
-       use_lockfile   = true
+       use_lockfile  = true
      }
      generate = {
        path      = "backend.tf"
@@ -210,18 +210,18 @@ If you'd like to interact with the infrastructure that was just provisioned, you
    ```bash
    $ cd non-prod/us-east-1/stateful-lambda-service
    $ terragrunt stack output
-   lambda_service = {
-     function_name = "stateful-lambda-service-dev"
-     function_arn  = "arn:aws:lambda:us-east-1:XXXXXXXXXXXX:function:stateful-lambda-service-dev"
-     invoke_url    = "https://XXXXXXXXXX.execute-api.us-east-1.amazonaws.com"
+   role = {
+     arn  = "arn:aws:iam::XXXXXXXXXXXX:role/stateful-lambda-service-dev-role"
+     name = "stateful-lambda-service-dev-role"
    }
    db = {
-     table_name = "stateful-lambda-service-dev-db"
-     table_arn  = "arn:aws:dynamodb:us-east-1:XXXXXXXXXXXX:table/stateful-lambda-service-dev-db"
+     arn  = "arn:aws:dynamodb:us-east-1:XXXXXXXXXXXX:table/stateful-lambda-service-dev-db"
+     name = "stateful-lambda-service-dev-db"
    }
-   role = {
-     role_name = "stateful-lambda-service-dev-role"
-     role_arn  = "arn:aws:iam::XXXXXXXXXXXX:role/stateful-lambda-service-dev-role"
+   lambda_service = {
+     function_arn  = "arn:aws:lambda:us-east-1:XXXXXXXXXXXX:function:stateful-lambda-service-dev"
+     function_name = "stateful-lambda-service-dev"
+     function_url  = "https://XXXXXXXXXX.lambda-url.us-east-1.on.aws/"
    }
    ```
 
@@ -230,14 +230,18 @@ If you'd like to interact with the infrastructure that was just provisioned, you
 2. Use the output values to interact with the infrastructure.
 
    ```bash
-   $ URL="$(terragrunt stack output --raw service.url)"
+   $ URL="$(terragrunt stack output --raw lambda_service.function_url)"
    $ curl $URL
-   OK
-   $ curl $URL/movies
-   [{"id":1,"title":"The Matrix","releaseYear":1999},{"id":2,"title":"The Matrix Reloaded","releaseYear":2003},{"id":3,"title":"The Matrix Revolutions","releaseYear":2003}]
+   {"count":0}
+   $ curl -X POST $URL
+   {"count":1}
+   $ curl $URL
+   {"count":1}
    ```
 
-   Outputs can be indexed by output key. In this case, the `service` unit has an output key of `url`, so we can access it directly with `service.url`. When outputs are nested into stacks, you can access them by chaining the stack name, unit name, and output key.
+   A `GET` request returns the current count as JSON. A `POST` request increments the count and returns the updated value.
+
+   Outputs can be indexed by output key. In this case, the `lambda_service` unit has an output key of `function_url`, so we can access it directly with `lambda_service.function_url`. When outputs are nested into stacks, you can access them by chaining the stack name, unit name, and output key.
 
 ## How is the code in this repository organized?
 
@@ -314,7 +318,7 @@ unit "lambda_service" {
   //
   // If you are using a private catalog, you may want to use an SSH source URL instead:
   // source = "git::git@github.com:acme/terragrunt-infrastructure-catalog.git//units/lambda-stateful-service"
-  source = "github.com/gruntwork-io/terragrunt-infrastructure-catalog-example//units/lambda-stateful-service"
+  source = "github.com/gruntwork-io/terragrunt-infrastructure-catalog-example//units/js-lambda-stateful-service"
 
   path = "service"
 
@@ -326,9 +330,9 @@ unit "lambda_service" {
     name = local.name
 
     // Required inputs
-    runtime    = "provided.al2023"
+    runtime    = "nodejs22.x"
     source_dir = "./src"
-    handler    = "bootstrap"
+    handler    = "index.handler"
     zip_file   = "handler.zip"
 
     // Optional inputs
