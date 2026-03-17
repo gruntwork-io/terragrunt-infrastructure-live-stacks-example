@@ -36,7 +36,7 @@ remote_state {
   backend = "s3"
   config = {
     encrypt        = true
-    bucket         = "${get_env("TG_BUCKET_PREFIX", "")}terragrunt-example-tf-state-${local.account_name}-${local.aws_region}"
+    bucket         = "${get_env("EX_BUCKET_PREFIX", "")}terragrunt-example-tf-state-${local.account_name}-${local.aws_region}"
     key            = "${path_relative_to_include()}/tf.tfstate"
     region         = local.aws_region
     use_lockfile  = true

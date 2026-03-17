@@ -123,7 +123,7 @@ Before you start provisioning the infrastructure in this repository, you'll want
      config = {
        encrypt        = true
        # vvvvv Replace this vvvvvv
-       bucket         = "${get_env("TG_BUCKET_PREFIX", "")}terragrunt-example-tf-state-${local.account_name}-${local.aws_region}"
+       bucket         = "${get_env("EX_BUCKET_PREFIX", "")}terragrunt-example-tf-state-${local.account_name}-${local.aws_region}"
        # ^^^^^ Replace this ^^^^^^
        key            = "${path_relative_to_include()}/tf.tfstate"
        region         = local.aws_region
@@ -136,7 +136,7 @@ Before you start provisioning the infrastructure in this repository, you'll want
    }
    ```
 
-   Alternatively, you can set the `TG_BUCKET_PREFIX` environment variable to set a custom prefix. S3 bucket names must be globally unique across all AWS customers, so you'll have to make sure that the value you choose doesn't conflict with any existing bucket names.
+   Alternatively, you can set the `EX_BUCKET_PREFIX` environment variable to set a custom prefix. S3 bucket names must be globally unique across all AWS customers, so you'll have to make sure that the value you choose doesn't conflict with any existing bucket names.
 
 2. Update the `account_name` and `aws_account_id` parameters in [`non-prod/account.hcl`](/non-prod/account.hcl) and [`prod/account.hcl`](/prod/account.hcl) with the names and IDs of accounts you want to use for non production and production workloads, respectively.
 
