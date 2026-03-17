@@ -164,12 +164,12 @@ Before you start provisioning the infrastructure in this repository, you'll want
 2. Run the following to generate the relevant units for the stack, and run a plan against them.
 
    ```bash
-   terragrunt run --all --non-interactive --bootstrap-backend plan
+   terragrunt run --all --non-interactive --backend-bootstrap plan
    ```
 
    > [!TIP]
    >
-   > The `--bootstrap-backend` flag there allows Terragrunt to automatically create relevant backend resources for you before running OpenTofu.
+   > The `--backend-bootstrap` flag there allows Terragrunt to automatically create relevant backend resources for you before running OpenTofu.
    >
    > You don't need to use the flag if you are using backend resources that already exist, or don't want Terragrunt to create them for you.
 
