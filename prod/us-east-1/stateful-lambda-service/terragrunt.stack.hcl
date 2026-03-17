@@ -1,5 +1,5 @@
 locals {
-  name = "stateful-lambda-service"
+  name = "${get_env("EX_APP_PREFIX", "")}stateful-lambda-service"
 }
 
 unit "lambda_service" {
