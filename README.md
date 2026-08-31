@@ -380,7 +380,7 @@ When you run `terragrunt` commands you may find that `.terraform.lock.hcl` files
 
 These files are intentionally not committed to this example repository, but definitely should be in your own repositories!
 
-They help make sure that your IaC results in reproducible infrastructure. For more on this, read [Lock File Handling docs](https://terragrunt.gruntwork.io/docs/features/lock-file-handling/).
+They help make sure that your IaC results in reproducible infrastructure. For more on this, read [Lock File Handling docs](https://docs.terragrunt.com/features/units/lock-files/).
 
 ## How to get help
 
