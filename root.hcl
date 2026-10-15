@@ -12,9 +12,8 @@ locals {
   region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl"))
 
   # Extract the variables we need for easy access
-  account_name = local.account_vars.locals.account_name
-  account_id   = local.account_vars.locals.aws_account_id
-  aws_region   = local.region_vars.locals.aws_region
+  account_id = local.account_vars.locals.aws_account_id
+  aws_region = local.region_vars.locals.aws_region
 }
 
 # Generate an AWS provider block
@@ -31,15 +30,19 @@ provider "aws" {
 EOF
 }
 
-# Configure Terragrunt to automatically store tfstate files in an S3 bucket
+# Configure Terragrunt to automatically store tfstate files in an S3 bucket.
+#
+# The bucket name ends in the account ID, the region, and `-an`, so Terragrunt creates it in the account regional
+# namespace, where only this account can create buckets.
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html
 remote_state {
   backend = "s3"
   config = {
-    encrypt        = true
-    bucket         = "${get_env("EX_BUCKET_PREFIX", "")}terragrunt-example-tf-state-${local.account_name}-${local.aws_region}"
-    key            = "${path_relative_to_include()}/tf.tfstate"
-    region         = local.aws_region
-    use_lockfile  = true
+    encrypt      = true
+    bucket       = "terragrunt-example-tf-state-${local.account_id}-${local.aws_region}-an"
+    key          = "${path_relative_to_include()}/tf.tfstate"
+    region       = local.aws_region
+    use_lockfile = true
   }
   generate = {
     path      = "backend.tf"
