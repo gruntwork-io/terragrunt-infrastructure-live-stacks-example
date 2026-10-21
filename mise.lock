@@ -43,41 +43,41 @@ url = "https://github.com/opentofu/opentofu/releases/download/v1.11.5/tofu_1.11.
 url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/354856987"
 
 [[tools.terragrunt]]
-version = "1.2.0-rc3"
+version = "1.2.0"
 backend = "aqua:gruntwork-io/terragrunt"
-specifiers = ["1.2.0-rc3"]
+specifiers = ["1.2.0"]
 
 [tools.terragrunt."platforms.linux-arm64"]
-checksum = "sha256:be58f3195f56776bc78a23248a06d37972292d1a27fa7b27d572ea1c315463ce"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644448013"
+checksum = "sha256:1e13b7f0646fa7962bc6c5bfba14a30d6a589325b82561e21b66be5981d86395"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662437526"
 
 [tools.terragrunt."platforms.linux-arm64-musl"]
-checksum = "sha256:be58f3195f56776bc78a23248a06d37972292d1a27fa7b27d572ea1c315463ce"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644448013"
+checksum = "sha256:1e13b7f0646fa7962bc6c5bfba14a30d6a589325b82561e21b66be5981d86395"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662437526"
 
 [tools.terragrunt."platforms.linux-x64"]
-checksum = "sha256:177779c8f14b1183b48155dbfd81af3488a1508a19c9ebda88c41d62f60c71f1"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644447087"
+checksum = "sha256:23b5f2f9203d34919f7fd270a4b635b721b4903beca9762a1e4853b159bc9be8"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662437263"
 
 [tools.terragrunt."platforms.linux-x64-musl"]
-checksum = "sha256:177779c8f14b1183b48155dbfd81af3488a1508a19c9ebda88c41d62f60c71f1"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644447087"
+checksum = "sha256:23b5f2f9203d34919f7fd270a4b635b721b4903beca9762a1e4853b159bc9be8"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662437263"
 
 [tools.terragrunt."platforms.macos-arm64"]
-checksum = "sha256:0e7caf7de4b5c456d2c3b790f4dbea04e7f695ef69343878e795abe3d8f8d14e"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644446044"
+checksum = "sha256:79790d841ce71fe94c689fb6f5034afd31ad53d5904937c7a10934cca9d9734b"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662436516"
 
 [tools.terragrunt."platforms.macos-x64"]
-checksum = "sha256:6eac00512965bb0f494ac909ad02db5cf339fddd850cdce5b25b42efe35404b9"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644444932"
+checksum = "sha256:0b0e63e80509eb1ffb4f89b892bc6fbf7728f27f0a73974400f1bd82a80b8627"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662436142"
 
 [tools.terragrunt."platforms.windows-x64"]
-checksum = "sha256:0511d74bebed0596ad26b457343b0f8ffad91267d376ac15b7cb958529f6eddd"
-url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0-rc3/terragrunt_windows_amd64.exe.tar.gz"
-url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/644449267"
+checksum = "sha256:c9a146b9aad456a289614023ad5778123d819af3cf9efd1c6130f196cfcb1999"
+url = "https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.0/terragrunt_windows_amd64.exe.tar.gz"
+url_api = "https://api.github.com/repos/gruntwork-io/terragrunt/releases/assets/662438255"
