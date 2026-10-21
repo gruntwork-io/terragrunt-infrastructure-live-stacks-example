@@ -115,30 +115,7 @@ The following conventions are some best practices for an `infrastructure-live` r
 
 Before you start provisioning the infrastructure in this repository, you'll want to do the following:
 
-1. Update the `bucket` attribute of the `remote_state` block in the `root.hcl` file to a unique name.
-
-   ```hcl
-   remote_state {
-     backend = "s3"
-     config = {
-       encrypt        = true
-       # vvvvv Replace this vvvvvv
-       bucket         = "${get_env("EX_BUCKET_PREFIX", "")}terragrunt-example-tf-state-${local.account_name}-${local.aws_region}"
-       # ^^^^^ Replace this ^^^^^^
-       key            = "${path_relative_to_include()}/tf.tfstate"
-       region         = local.aws_region
-       use_lockfile  = true
-     }
-     generate = {
-       path      = "backend.tf"
-       if_exists = "overwrite_terragrunt"
-     }
-   }
-   ```
-
-   Alternatively, you can set the `EX_BUCKET_PREFIX` environment variable to set a custom prefix. S3 bucket names must be globally unique across all AWS customers, so you'll have to make sure that the value you choose doesn't conflict with any existing bucket names.
-
-2. Set the `EX_NON_PROD_ACCOUNT_ID` and `EX_PROD_ACCOUNT_ID` environment variables to the AWS account IDs you want to use for non-production and production workloads, respectively.
+1. Set the `EX_NON_PROD_ACCOUNT_ID` and `EX_PROD_ACCOUNT_ID` environment variables to the AWS account IDs you want to use for non-production and production workloads, respectively.
 
    ```bash
    export EX_NON_PROD_ACCOUNT_ID="123456789012"
@@ -149,6 +126,29 @@ Before you start provisioning the infrastructure in this repository, you'll want
 
    > [!TIP]
    > If you want everything deployed in a single AWS account, you can set both environment variables to the same value (or use the same hardcoded string in both files).
+
+2. Review the `remote_state` block in the `root.hcl` file. It stores state in an S3 bucket in each account's [account regional namespace](https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html).
+
+   ```hcl
+   remote_state {
+     backend = "s3"
+     config = {
+       encrypt      = true
+       bucket       = "terragrunt-example-tf-state-${local.account_id}-${local.aws_region}-an"
+       key          = "${path_relative_to_include()}/tf.tfstate"
+       region       = local.aws_region
+       use_lockfile = true
+     }
+     generate = {
+       path      = "backend.tf"
+       if_exists = "overwrite_terragrunt"
+     }
+   }
+   ```
+
+   Only your account can create buckets in its account regional namespace, so you don't need to pick a globally unique bucket name. The name has to end with the account ID, the region, and `-an`, and Terragrunt v1.2.0 or later creates a bucket with a name like that in the account regional namespace. You can change the `terragrunt-example-tf-state` prefix if you like.
+
+   If you deploy everything to a single AWS account, both `non-prod` and `prod` store state in the same bucket, under different keys.
 
 3. Configure your local AWS credentials using one of the supported [authentication mechanisms](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html).
 
