@@ -243,6 +243,41 @@ If you'd like to interact with the infrastructure that was just provisioned, you
 
    Outputs can be indexed by output key. In this case, the `lambda_service` unit has an output key of `function_url`, so we can access it directly with `lambda_service.function_url`. When outputs are nested into stacks, you can access them by chaining the stack name, unit name, and output key.
 
+## Browsing the infrastructure catalog
+
+The `catalog` block at the end of [`root.hcl`](./root.hcl) lists repositories of reusable infrastructure that you can build on in this repository:
+
+```hcl
+catalog {
+  urls = [
+    "https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example",
+    "https://github.com/gruntwork-io/terraform-aws-utilities",
+    "https://github.com/gruntwork-io/terraform-kubernetes-namespace"
+  ]
+}
+```
+
+To browse them, run the following from the root of the repository:
+
+```bash
+terragrunt catalog
+```
+
+Terragrunt reads the `catalog` block from `root.hcl`, clones each repository into a temporary directory, and opens a terminal UI listing the components it found: OpenTofu/Terraform modules, Boilerplate templates and Terragrunt units + stacks. You can also run it from any directory below the root, since Terragrunt searches parent directories for `root.hcl`.
+
+In the terminal UI:
+
+- Press `Tab` and `Shift+Tab` to switch between tabs that show all components or one kind at a time.
+- Press `/` and start typing to filter the list.
+- Use the arrow keys to move through the list.
+- Press `Enter` to read the README of the selected component.
+- Press `s` to scaffold the selected component.
+- Press `q` to quit.
+
+Scaffolding writes to the directory you launched the catalog from, so create the directory for the new component and run the catalog from there. Units and stacks are copied as they are, and templates are rendered with Boilerplate. A module gets a new unit with a `terragrunt.hcl` file, which by default includes a root file named `root.hcl`.
+
+To browse a different repository, pass its URL to the command (e.g. `terragrunt catalog https://github.com/acme/infrastructure-catalog`), or add it to the `urls` list in `root.hcl` to share it with everyone working in this repository. For more, see the [Catalog docs](https://docs.terragrunt.com/features/catalog).
+
 ## How is the code in this repository organized?
 
 The IaC code in this repository is organized into a hierarchy of Terragrunt stacks, representing the blast radius of the infrastructure being managed in the context of AWS infrastructure management.
