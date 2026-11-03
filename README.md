@@ -85,6 +85,8 @@ This repository contains the following:
 
 - `region.hcl` files: In each region directory (e.g. `us-east-1`), there is a `region.hcl` file that defines the common configurations for that region.
 
+- `azure` directory: The same layout for Azure, with its own `root.hcl`. See the [Azure README](/azure/README.md).
+
 - `root.hcl`: The root Terragrunt configuration inherited by all other Terragrunt units in this repository. This file contains code that reads the `account.hcl` and `region.hcl` files in every unit, and leverages them for provider and backend configurations.
 
 - `terragrunt.stack.hcl` files: These files define a stack of Terragrunt units.
@@ -181,7 +183,7 @@ Before you start provisioning the infrastructure in this repository, you'll want
 
 ### Provisioning all stacks
 
-If you want to provision all the stacks in this repository, you can do the same at the root of the repository.
+If you want to provision all the AWS stacks in this repository, you can do the same at the root of the repository. The `--filter` below leaves out the `azure` directory, which has [its own instructions](/azure/README.md).
 
 1. Navigate back up to the root of the repository.
 
@@ -192,13 +194,13 @@ If you want to provision all the stacks in this repository, you can do the same 
 2. Plan all units.
 
    ```bash
-   terragrunt run --all --non-interactive plan
+   terragrunt run --all --non-interactive --filter '!./azure/**' plan
    ```
 
 3. Apply all units.
 
    ```bash
-   terragrunt run --all --non-interactive apply
+   terragrunt run --all --non-interactive --filter '!./azure/**' apply
    ```
 
 ## Interacting with the provisioned infrastructure
