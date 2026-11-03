@@ -1,3 +1,2 @@
 [tools]
 opentofu = "1.13.1"
-terragrunt = "1.2.0"

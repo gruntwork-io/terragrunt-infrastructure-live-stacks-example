@@ -1,0 +1,114 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# STATEGRAPH ORCHESTRATION CONFIGURATION
+# This file does the work that Terragrunt did in this repository:
+#
+#   Terragrunt                                   Here
+#   ------------------------------------------   ---------------------------------------------------------------------
+#   mise.toml (opentofu version)                  engine
+#   root.hcl remote_state + generate backend.tf   `backend "local" {}` in each root module (demo, see below)
+#   account.hcl / region.hcl                      stacks.names.<account>.variables
+#   autoinclude dependency (order)                dirs.<dir>.when_modified.depends_on
+#   mark_glob_as_read("src/**")                   dirs.<service>.when_modified.file_patterns
+#   before_hook "package"                         definitions.package (a run step in the service workflow)
+#   terragrunt run --all plan / apply             autoplan on each pull request, `stategraph plan` / `stategraph apply`
+#
+# Stack variables are exported as environment variables in each run. OpenTofu reads the `TF_VAR_*` ones as input
+# variables, and the runner expands `${...}` in step commands from the same environment.
+#
+# DEMO: the modules use `terraform_data` resources in place of AWS resources, and each root module keeps its state in
+# a local `terraform.tfstate` file. Thus no AWS account, no credentials, and no state bucket are necessary.
+# ---------------------------------------------------------------------------------------------------------------------
+
+engine:
+  name: tofu
+  version: '1.13.1'
+
+# The indexer reads the `module` blocks of each root module, and follows local module sources. Thus:
+#   - A directory that a `module` block references is a module. It never plans or applies on its own.
+#   - A root module plans when a `*.tf` file of a module that it uses changes.
+# The `dirs` section thus does not list the modules. The indexer adds only `*.tf` files of modules. Other files that
+# a root module reads, such as the handler source, must be in `file_patterns`.
+indexer:
+  enabled: true
+
+definitions:
+  # The root modules use `backend "local" {}`, so the `init` step needs no backend arguments.
+  init: &init
+    type: init
+
+  # Replaces the `before_hook "package"` of the js-lambda-stateful-service unit. It runs in the directory of the
+  # run, and writes handler.zip there. The root module reads it as `${path.module}/handler.zip`.
+  package: &package
+    type: run
+    cmd:
+      - 'python3'
+      - '${TERRATEAM_ROOT}/scripts/package-lambda.py'
+      - '${TERRATEAM_ROOT}/modules/stateful-lambda-service/service/src'
+      - 'handler.zip'
+
+# A glob key in `dirs` matches file paths. The directory of a matching file gets the entry. Thus each key ends in
+# `/*.tf`. When more than one glob key matches a file, the longest key wins. The entries do not merge.
+#
+# The db root modules need no entry: the default `file_patterns` (`${DIR}/*.tf`, `${DIR}/*.tfvars`) and the
+# indexer are sufficient. An entry with no `file_patterns` also gets the default.
+dirs:
+  # Terragrunt: dependency "dynamodb_table" { config_path = unit.db.path }
+  '*/*/stateful-lambda-service/roles/lambda-iam-role-to-dynamodb/*.tf':
+    when_modified:
+      depends_on: 'relative_dir:../../db'
+
+  # Terragrunt: dependency "role" { config_path = unit.role.path }
+  #             dependency "dynamodb_table" { config_path = unit.db.path }
+  #             mark_glob_as_read("${local.src_dir}/{*,**/*}")
+  '*/*/stateful-lambda-service/service/*.tf':
+    when_modified:
+      file_patterns:
+        - '${DIR}/*.tf'
+        - 'modules/stateful-lambda-service/service/src/**'
+        - 'scripts/package-lambda.py'
+      depends_on: 'relative_dir:../db or relative_dir:../roles/lambda-iam-role-to-dynamodb'
+
+# One stack per AWS account. Each stack replaces the account.hcl and region.hcl files of that account.
+# `<name> in dir` matches directories with a path component that is exactly <name>. Thus `prod in dir` does not
+# match `non-prod/...`.
+#
+# The account IDs are only used to make the ARNs of the demo resources. Any value works.
+stacks:
+  names:
+    non-prod:
+      tag_query: 'non-prod in dir'
+      variables:
+        TF_VAR_aws_account_id: '123456789012'
+        TF_VAR_aws_region: 'us-east-1'
+
+    prod:
+      tag_query: 'prod in dir'
+      variables:
+        TF_VAR_aws_account_id: '210987654321'
+        TF_VAR_aws_region: 'us-east-1'
+      rules:
+        # DIVERGENCE FROM TERRAGRUNT: Terragrunt had no order between the non-prod and prod stacks.
+        # `terragrunt run --all apply` at the repository root applied both, in any order. This rule adds an order:
+        # when a pull request changes both accounts, prod applies only after non-prod applied.
+        apply_after:
+          - non-prod
+
+# The first entry that matches a directory wins. Thus the service entry is first.
+workflows:
+  - tag_query: 'service in dir'
+    plan:
+      - *init
+      - *package
+      - type: plan
+    apply:
+      - *init
+      - *package
+      - type: apply
+
+  - tag_query: ''
+    plan:
+      - *init
+      - type: plan
+    apply:
+      - *init
+      - type: apply

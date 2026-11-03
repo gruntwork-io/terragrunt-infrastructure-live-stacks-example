@@ -1,7 +1,3 @@
-# Terragrunt
-.terragrunt-cache
-.terragrunt-stack
-
 # OpenTofu/Terraform
 .terraform
 *.tfstate

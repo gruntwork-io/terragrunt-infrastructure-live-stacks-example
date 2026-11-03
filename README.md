@@ -1,422 +1,113 @@
-[![Maintained by Gruntwork.io](https://img.shields.io/badge/maintained%20by-gruntwork.io-%235849a6.svg)](https://gruntwork.io/?ref=repo_terragrunt-infra-live-example)
+# Example infrastructure-live for Stategraph Orchestration
 
-# Example infrastructure-live for Terragrunt (with Stacks)
+This repository describes a small stateful serverless service (an AWS Lambda function, a DynamoDB table, and an IAM role) to two AWS accounts, `non-prod` and `prod`. It is plain OpenTofu. [Stategraph Orchestration](https://stategraph.com/docs/orchestration) plans and applies it from pull requests.
 
-This repository, along with the [terragrunt-infrastructure-catalog-example repository](https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example),
-offers a best practice system for organizing your Infrastructure as Code (IaC) so that you can maintain your IaC at any
-scale with confidence using an `infrastructure-live` repository.
+> [!IMPORTANT]
+> This is a demo version. The modules do not create AWS resources. Each module has a `terraform_data` resource in place of the AWS resource, and its outputs have the same shape as the outputs of the real resource. Each root module keeps its state in a local `terraform.tfstate` file. Thus you do not need an AWS account, AWS credentials, or a state bucket, and `tofu init` downloads no providers.
+>
+> The local state files stay on the machine that ran OpenTofu. A CI runner that starts from a new checkout for each job does not keep them. In that case, the `role` and `service` root modules cannot read the state of `db` and `role`, and their plans fail with `Unable to find remote state`.
 
-If you have not already done so, you are encouraged to read the [Terragrunt Getting Started Guide](https://terragrunt.gruntwork.io/docs/getting-started/quick-start/) to get familiar with the terminology and concepts used in this repository before proceeding.
+The repository started as Gruntwork's [terragrunt-infrastructure-live-stacks-example](https://github.com/gruntwork-io/terragrunt-infrastructure-live-stacks-example). It was ported from Terragrunt Stacks to plain OpenTofu and a `.stategraph/config.yml` file. [Terragrunt to Stategraph Orchestration](#terragrunt-to-stategraph-orchestration) shows where each Terragrunt feature went.
 
-## What is an `infrastructure-live` repository?
+> [!NOTE]
+> This code is for demonstration only. It is not production-ready.
 
-An `infrastructure-live` repository is a Gruntwork best practice for managing your "live" infrastructure. That is, the
-infrastructure that is actually provisioned, as opposed to infrastructure patterns that *can* be provisioned.
+## Repository contents
 
-## Key Features & Benefits
+```tree
+.stategraph/config.yml                  Orchestration configuration: engine, accounts, order, packaging
+.github/workflows/terrateam.yml         The workflow that Orchestration starts on GitHub Actions
+modules/stateful-lambda-service/        Local modules, one per component. Demo stand-ins for the catalog modules.
+  db/                                   DynamoDB table
+  role/                                 IAM role that the function uses to read and write the table
+  service/                              Lambda function, and its handler source in src/
+non-prod/us-east-1/stateful-lambda-service/
+  db/                                   Root module: the table for non-prod
+  roles/lambda-iam-role-to-dynamodb/    Root module: the role for non-prod
+  service/                              Root module: the function for non-prod
+prod/us-east-1/stateful-lambda-service/ The same three root modules for prod
+scripts/package-lambda.py               Packages the handler source into handler.zip
+```
 
-This repository provides a practical blueprint for managing infrastructure with Terragrunt, demonstrating:
+The hierarchy is `account / region / service / component`, as in the Terragrunt version. Each component is a root module with its own state. The root modules are thin: each one calls a module in `modules/stateful-lambda-service/`, and gives it the values for its account. The prod and non-prod root modules differ only in the resource names and the state paths.
 
-* **Modern Terragrunt Workflow:** Leverages Terragrunt Stacks for clear dependency management and streamlined multi-component deployments.
-* **Scalable `infrastructure-live` Structure:** Organizes infrastructure logically by account and region, providing a proven foundation adaptable to growing complexity.
-* **Best-Practice Separation:** Clearly separates environment-specific "live" configurations (this repo) from reusable infrastructure patterns (via an `infrastructure-catalog`).
-* **DRY Configuration:** Reduces code duplication using hierarchical configuration files (`root.hcl`, `account.hcl`, `region.hcl`).
-* **Concrete End-to-End Example:** Deploys a sample stateful serverless application (Lambda, DynamoDB) across distinct production and non-production environments.
-* **Reproducible Tooling:** Includes `mise` configuration for easy installation of pinned versions of Terragrunt and OpenTofu/Terraform.
+The Terragrunt version used the OpenTofu modules of the [terragrunt-infrastructure-catalog-example](https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example) repository. In this demo, the modules in `modules/stateful-lambda-service/` have `terraform_data` stand-ins for them. Each stand-in keeps the same inputs and outputs, so you can put the catalog module back without a change to the root modules.
 
-## Getting Started
+## How Orchestration runs this repository
 
-> [!TIP]
-> If you have an existing repository that was started using the [terragrunt-infrastructure-live-example](https://github.com/gruntwork-io/terragrunt-infrastructure-live-example) repository as a starting point, follow the [migration guide](/docs/migration-guide.md) for help in adjusting your existing configurations to take advantage of the patterns outlined in this repository.
+When a pull request changes a root module, a module it uses, or the handler source, Orchestration plans the affected root modules and comments the plan on the pull request.
 
-To use this repository, you'll want to fork this repository into your own Git organization.
+- **Order.** `service` reads the outputs of `db` and `role`, and `role` reads the outputs of `db`. The `depends_on` rules in `.stategraph/config.yml` order them. Orchestration plans and applies `db` first, then `role`, then `service`. A component plans only after the components that it depends on are applied.
+- **Modules.** The indexer is on in `.stategraph/config.yml`. It reads the `module` blocks of the root modules. A change to a `*.tf` file in `modules/` thus plans each root module that uses that module, and the module directory itself never plans. The indexer adds only `*.tf` files. Thus the `service` entry lists the handler source and the packaging script in `file_patterns`.
+- **Accounts.** Each account is a stack in `.stategraph/config.yml`. The stack sets the account ID and the region as `TF_VAR_*` environment variables for each run in that account. The demo modules use them only to make the ARNs.
+- **prod after non-prod.** When a pull request changes both accounts, prod applies only after non-prod is applied. The Terragrunt version did not have this order.
+- **Packaging.** Before each plan and apply of a `service` root module, a `run` step makes `handler.zip` from `modules/stateful-lambda-service/service/src`. The zip is the same for the same source, so the plan and the apply, which run in different CI jobs, use the same bytes. The demo function keeps the hash of the zip, so a change to the handler source shows in the plan.
 
-The steps for doing this are the following:
+To plan again, comment `stategraph plan`. To apply, comment `stategraph apply`. To limit a command to one account, add a tag query, for example `stategraph plan 'non-prod in dir'`.
 
-1. Create a new Git repository in your organization (e.g. [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository), [GitLab](https://docs.gitlab.com/user/project/repository/)).
+## Setup
 
-2. Create a bare clone of this repository somewhere on your local machine.
+1. Connect the repository to Stategraph Orchestration, on [Stategraph Cloud](https://stategraph.com/docs/get-started/quickstart/cloud) or a [self-hosted](https://stategraph.com/docs/get-started/quickstart/self-hosted) server. Put `.github/workflows/terrateam.yml` on the default branch before you open the first pull request.
 
-   ```bash
-   git clone --bare https://github.com/gruntwork-io/terragrunt-infrastructure-live-stacks-example.git
-   ```
+2. Optional: change the account IDs in the `stacks` section of `.stategraph/config.yml`. The demo uses them only in the ARNs of the demo resources.
 
-3. Push the bare clone to your new Git repository.
+3. Optional: to add a prefix to all resource names, set the GitHub Actions variable `TF_VAR_APP_PREFIX`. The runner gives it to OpenTofu as the `app_prefix` variable. (This was the `EX_APP_PREFIX` environment variable in the Terragrunt version.)
 
-   ```bash
-   cd terragrunt-infrastructure-live-stacks-example.git
-   git push --mirror <YOUR_GIT_REPO_URL> # e.g. git push --mirror git@github.com:acme/terragrunt-infrastructure-live-stacks-example.git
-   ```
+4. Open a pull request that changes the infrastructure, and read the plan comment.
 
-4. Remove the local clone of the repository.
+## Run it on your machine
 
-   ```bash
-   cd ..
-   rm -rf terragrunt-infrastructure-live-stacks-example.git
-   ```
+Each root module has its own local state. Apply the root modules of an account in dependency order: `db`, then `role`, then `service`. The `service` root module needs `handler.zip` before each plan and apply.
 
-5. (Optional) Delete the contents of this usage documentation from your fork of this repository.
+```bash
+export TF_VAR_aws_account_id=123456789012 TF_VAR_aws_region=us-east-1
+cd non-prod/us-east-1/stateful-lambda-service
 
-## Prerequisites
+(cd db && tofu init && tofu apply)
+(cd roles/lambda-iam-role-to-dynamodb && tofu init && tofu apply)
+(cd service \
+  && python3 ../../../../scripts/package-lambda.py ../../../../modules/stateful-lambda-service/service/src handler.zip \
+  && tofu init && tofu apply)
+```
 
-To use this repository, you'll want to make sure you have the following installed:
+To read an output, for example the function URL:
 
-- [Terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/)
-- [OpenTofu](https://opentofu.org/docs/intro/install/) (or [Terraform](https://developer.hashicorp.com/terraform/install))
+```bash
+cd non-prod/us-east-1/stateful-lambda-service/service
+tofu output -raw function_url
+```
 
-To simplify the process of installing these tools, you can install [mise](https://mise.jdx.dev/), then run the following to concurrently install all the tools you need, pinned to the versions they were tested with (as tracked in the [mise.toml](./mise.toml) file):
+The URL has the form of a real Lambda function URL, but no function is behind it.
+
+## Terragrunt to Stategraph Orchestration
+
+| Terragrunt | Here |
+| --- | --- |
+| `terragrunt.stack.hcl` `unit` blocks, generated into `.terragrunt-stack/` | Committed root modules under `<account>/<region>/stateful-lambda-service/` |
+| Catalog `units/*` (`terragrunt.hcl`) | Local modules in `modules/stateful-lambda-service/`, with `terraform_data` stand-ins for the catalog modules (demo) |
+| `values` and unit `inputs` | Module arguments in the root modules |
+| `autoinclude { dependency { config_path } }` | `depends_on` in `.stategraph/config.yml` (order), and `terraform_remote_state` in the root modules (outputs) |
+| `mock_outputs` | Not needed. A component plans only after its dependencies are applied. |
+| `account.hcl`, `region.hcl`, `find_in_parent_folders` | One stack per account in `.stategraph/config.yml`, with `TF_VAR_*` variables |
+| `generate "provider"` | Not needed. The demo modules use no provider. |
+| `remote_state` (S3) and `path_relative_to_include()` | `backend "local" {}` in each root module (demo). The state is `<root module directory>/terraform.tfstate`. |
+| `--backend-bootstrap` | Not needed. The local backend needs no bucket. |
+| `before_hook "package"` and `mark_glob_as_read` | A `run` step with `scripts/package-lambda.py`, and `file_patterns` that include `src/**` |
+| `terragrunt run --all plan` / `apply` | Pull request plans, and the `stategraph plan` / `stategraph apply` comments |
+| `terragrunt stack output` | Not ported. Use `tofu output` in each root module. |
+| `catalog` block and `terragrunt catalog` | Not ported |
+| `mise.toml` `opentofu` version | `engine.version` in `.stategraph/config.yml` (also kept in `mise.toml` for local use) |
+
+The Terragrunt version declared its `dependency` blocks but did not give their outputs to the units: the role had no `policy`, and the function had no `iam_role_arn` and no `DYNAMODB_TABLE`. This port gives those values, as the catalog's own example stack does.
+
+## What to do with `.terraform.lock.hcl` files
+
+The demo modules use no provider, so `tofu init` does not create `.terraform.lock.hcl` files. When you use real providers, commit these files in your own repositories. They make sure that the same provider versions are used each time.
+
+## Local tools
+
+To install the pinned OpenTofu version, install [mise](https://mise.jdx.dev/) and run:
 
 ```bash
 mise install
 ```
-
-## Repository Contents
-
-> [!NOTE]
-> This code is solely for demonstration purposes. This is not production-ready code, so use at your own risk. If you are interested in battle-tested, production-ready Terragrunt and OpenTofu/Terraform code, continuously updated and maintained by a team of subject matter experts, consider purchasing a subscription to the [Gruntwork IaC Library](https://www.gruntwork.io/platform/iac-library).
-
-This repository contains the following:
-
-- `root.hcl`: The root Terragrunt configuration inherited by all other Terragrunt units in this repository.
-
-- `non-prod`/`prod` directories: Each of these directories are a representation of an AWS account, and all the infrastructure that's provisioned for an account can be found in the respective directory.
-
-- `account.hcl` files: In each account directory, there is an `account.hcl` file that defines the common configurations for that account.
-
-- `region.hcl` files: In each region directory (e.g. `us-east-1`), there is a `region.hcl` file that defines the common configurations for that region.
-
-- `root.hcl`: The root Terragrunt configuration inherited by all other Terragrunt units in this repository. This file contains code that reads the `account.hcl` and `region.hcl` files in every unit, and leverages them for provider and backend configurations.
-
-- `terragrunt.stack.hcl` files: These files define a stack of Terragrunt units.
-
-  Both the `terragrunt.stack.hcl` files in this repository provision the units required for a stateful Lambda service, including:
-
-  - AWS Lambda Function
-  - DynamoDB Table
-  - IAM Role
-
-  The configurations for these resources aren't defined in this repository, but are instead defined in the [terragrunt-infrastructure-catalog-example](https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example) repository.
-
-  This is a recommended, Gruntwork best practice, as it allows infrastructure teams to iterate on infrastructure patterns as versioned, immutable artifacts, and then reference pinned versions of these patterns in their "live" infrastructure-live repositories.
-
-## Best practices for an `infrastructure-live` repository
-
-The following conventions are some best practices for an `infrastructure-live` repository, as defined by Gruntwork:
-
-- Primarily use [Terragrunt](https://terragrunt.gruntwork.io/) configurations to define your IaC.
-- Avoid using OpenTofu/Terraform directly in `infrastructure-live` repositories. Instead, prefer to author them in an `infrastructure-catalog` repository (see [terragrunt-infrastructure-catalog-example](https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example)).
-- Follow [Trunk-Based Development](https://trunkbaseddevelopment.com/). The source of truth for your infrastructure is the code in the `main` branch (or whatever you configure the default branch to be).
-- Avoid using [OpenTofu/Terraform Workspaces](https://opentofu.org/docs/language/state/workspaces/). Instead, use [Terragrunt units](https://terragrunt.gruntwork.io/docs/getting-started/terminology/#unit) to isolate state.
-- Use [Stacks](https://terragrunt.gruntwork.io/docs/getting-started/terminology/#stack) to organize your infrastructure into logical collections of units.
-
-## How to provision the infrastructure in this repository
-
-### Setup
-
-Before you start provisioning the infrastructure in this repository, you'll want to do the following:
-
-1. Set the `EX_NON_PROD_ACCOUNT_ID` and `EX_PROD_ACCOUNT_ID` environment variables to the AWS account IDs you want to use for non-production and production workloads, respectively.
-
-   ```bash
-   export EX_NON_PROD_ACCOUNT_ID="123456789012"
-   export EX_PROD_ACCOUNT_ID="210987654321"
-   ```
-
-   Alternatively, you can replace the `get_env(...)` calls in [`non-prod/account.hcl`](/non-prod/account.hcl) and [`prod/account.hcl`](/prod/account.hcl) with hardcoded account ID strings.
-
-   > [!TIP]
-   > If you want everything deployed in a single AWS account, you can set both environment variables to the same value (or use the same hardcoded string in both files).
-
-2. Review the `remote_state` block in the `root.hcl` file. It stores state in an S3 bucket in each account's [account regional namespace](https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html).
-
-   ```hcl
-   remote_state {
-     backend = "s3"
-     config = {
-       encrypt      = true
-       bucket       = "terragrunt-example-tf-state-${local.account_id}-${local.aws_region}-an"
-       key          = "${path_relative_to_include()}/tf.tfstate"
-       region       = local.aws_region
-       use_lockfile = true
-     }
-     generate = {
-       path      = "backend.tf"
-       if_exists = "overwrite_terragrunt"
-     }
-   }
-   ```
-
-   Only your account can create buckets in its account regional namespace, so you don't need to pick a globally unique bucket name. The name has to end with the account ID, the region, and `-an`, and Terragrunt v1.2.0 or later creates a bucket with a name like that in the account regional namespace. You can change the `terragrunt-example-tf-state` prefix if you like.
-
-   If you deploy everything to a single AWS account, both `non-prod` and `prod` store state in the same bucket, under different keys.
-
-3. Configure your local AWS credentials using one of the supported [authentication mechanisms](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html).
-
-### Provisioning a single stack
-
-1. Navigate to the directory of the stack you want to provision.
-   e.g.
-
-   ```bash
-   cd non-prod/us-east-1/stateful-lambda-service
-   ```
-
-2. Run the following to generate the relevant units for the stack, and run a plan against them.
-
-   ```bash
-   terragrunt run --all --non-interactive --backend-bootstrap plan
-   ```
-
-   > [!TIP]
-   >
-   > The `--backend-bootstrap` flag there allows Terragrunt to automatically create relevant backend resources for you before running OpenTofu.
-   >
-   > You don't need to use the flag if you are using backend resources that already exist, or don't want Terragrunt to create them for you.
-
-3. If the plan looks good, run the following to apply the changes.
-
-   ```bash
-   terragrunt run --all --non-interactive apply
-   ```
-
-### Provisioning all stacks
-
-If you want to provision all the stacks in this repository, you can do the same at the root of the repository.
-
-1. Navigate back up to the root of the repository.
-
-   ```bash
-   cd ../../..
-   ```
-
-2. Plan all units.
-
-   ```bash
-   terragrunt run --all --non-interactive plan
-   ```
-
-3. Apply all units.
-
-   ```bash
-   terragrunt run --all --non-interactive apply
-   ```
-
-## Interacting with the provisioned infrastructure
-
-If you'd like to interact with the infrastructure that was just provisioned, you can do the following:
-
-1. Get the output values for the stack that you just provisioned.
-
-   ```bash
-   $ cd non-prod/us-east-1/stateful-lambda-service
-   $ terragrunt stack output
-   role = {
-     arn  = "arn:aws:iam::XXXXXXXXXXXX:role/stateful-lambda-service-dev-role"
-     name = "stateful-lambda-service-dev-role"
-   }
-   db = {
-     arn  = "arn:aws:dynamodb:us-east-1:XXXXXXXXXXXX:table/stateful-lambda-service-dev-db"
-     name = "stateful-lambda-service-dev-db"
-   }
-   lambda_service = {
-     function_arn  = "arn:aws:lambda:us-east-1:XXXXXXXXXXXX:function:stateful-lambda-service-dev"
-     function_name = "stateful-lambda-service-dev"
-     function_url  = "https://XXXXXXXXXX.lambda-url.us-east-1.on.aws/"
-   }
-   ```
-
-   Note that all the units in the stack display their outputs here. Outputs are organized by stack, then unit, then output name.
-
-2. Use the output values to interact with the infrastructure.
-
-   ```bash
-   $ URL="$(terragrunt stack output --raw lambda_service.function_url)"
-   $ curl $URL
-   {"count":0}
-   $ curl -X POST $URL
-   {"count":1}
-   $ curl $URL
-   {"count":1}
-   ```
-
-   A `GET` request returns the current count as JSON. A `POST` request increments the count and returns the updated value.
-
-   Outputs can be indexed by output key. In this case, the `lambda_service` unit has an output key of `function_url`, so we can access it directly with `lambda_service.function_url`. When outputs are nested into stacks, you can access them by chaining the stack name, unit name, and output key.
-
-## Browsing the infrastructure catalog
-
-The `catalog` block at the end of [`root.hcl`](./root.hcl) lists repositories of reusable infrastructure that you can build on in this repository:
-
-```hcl
-catalog {
-  urls = [
-    "https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example",
-    "https://github.com/gruntwork-io/terraform-aws-utilities",
-    "https://github.com/gruntwork-io/terraform-kubernetes-namespace"
-  ]
-}
-```
-
-To browse them, run the following from the root of the repository:
-
-```bash
-terragrunt catalog
-```
-
-Terragrunt reads the `catalog` block from `root.hcl`, clones each repository into a temporary directory, and opens a terminal UI listing the components it found: OpenTofu/Terraform modules, Boilerplate templates and Terragrunt units + stacks. You can also run it from any directory below the root, since Terragrunt searches parent directories for `root.hcl`.
-
-In the terminal UI:
-
-- Press `Tab` and `Shift+Tab` to switch between tabs that show all components or one kind at a time.
-- Press `/` and start typing to filter the list.
-- Use the arrow keys to move through the list.
-- Press `Enter` to read the README of the selected component.
-- Press `s` to scaffold the selected component.
-- Press `q` to quit.
-
-Scaffolding writes to the directory you launched the catalog from, so create the directory for the new component and run the catalog from there. Units and stacks are copied as they are, and templates are rendered with Boilerplate. A module gets a new unit with a `terragrunt.hcl` file, which by default includes a root file named `root.hcl`.
-
-To browse a different repository, pass its URL to the command (e.g. `terragrunt catalog https://github.com/acme/infrastructure-catalog`), or add it to the `urls` list in `root.hcl` to share it with everyone working in this repository. For more, see the [Catalog docs](https://docs.terragrunt.com/features/catalog).
-
-## How is the code in this repository organized?
-
-The IaC code in this repository is organized into a hierarchy of Terragrunt stacks, representing the blast radius of the infrastructure being managed in the context of AWS infrastructure management.
-
-The hierarchy is as follows:
-
-```tree
-account
- └ region
-    └ resources
-```
-
-Where:
-
-- `account` is the AWS account being managed (e.g. `non-prod`, `prod`, `mgmt`).
-- `region` is the AWS region being managed (e.g. `us-east-1`).
-- `resources` are the resources being managed (e.g. `stateful-lambda-service`).
-
-This structure is geared towards exclusive management of infrastructure in AWS, but can be adapted to other cloud providers, etc. by adjusting the hierarchy according to the patterns of the platform.
-
-The top-level `account` and `region` directories are there to give clear context for users that are familiar with AWS infrastructure management. Authentication and configuration of the OpenTofu AWS provider is specific to the AWS account and region, so it's also useful to have these directories to provide a straight-forward way to configure the provider.
-
-Many teams like to organize their environments into individual AWS accounts, and this structure makes it easy to do that. If you are part of a team that manages multiple environments in a single AWS account, you can simply add a new level of hierarchy under the `region` directory, like this:
-
-```tree
-account
- └ region
-    └ environment
-       └ resources
-```
-
-There's also an established convention to leverage a special `_global` directory to manage resources that are available across all regions, environments, etc. Structuring your IaC like that would look like this:
-
-```tree
-account
- ├ _global
- │  └ resources
- └ region
-    ├ _global
-    │  └ resources
-    └ environment
-       └ resources
-```
-
-Where:
-
-- **Account-level `_global`**: Contains resources that are available across all regions in the account, such as IAM users, Route 53 hosted zones, and CloudTrail.
-- **Region-level `_global`**: Contains resources that are available across all environments in a region, such as Route 53 A records, SNS topics, and ECR repositories.
-
-The `resources` directory can be arbitrarily deep, and can be used to organize resources under management in a way that makes sense for the team managing the infrastructure. In this repository it's fairly shallow for the sake of simplicity, with the units constituting the stack in the `terragrunt.stack.hcl` files defined in the [terragrunt-infrastructure-catalog-example](https://github.com/gruntwork-io/terragrunt-infrastructure-catalog-example) repository.
-
-## Where to store configuration
-
-### `root.hcl`
-
-The contents of the `root.hcl` file is configuration that is common to all units the repository. It's idiomatic Terragrunt code to always include this root file in every unit. There's very frequently some boilerplate configuration like defining the OpenTofu provider, setting state backend configurations, etc. that have to be repeated in every unit, so it's nice to have it defined once in the root file, and included in every unit.
-
-Avoid overloading this file with too much configuration, as it might not be the right level of abstraction for the configuration you need. Instead, prefer to use `terragrunt.stack.hcl` files to define configurations in `values` attributes, and pass down the values to the stacks and units that need them.
-
-### `terragrunt.stack.hcl`
-
-The `terragrunt.stack.hcl` file is used to define configurations for a stack of Terragrunt units. Any time you have multiple `terragrunt.hcl` files that need to be run together as part of your infrastructure deployment, you can define a `terragrunt.stack.hcl` file instead to encapsulate those configurations as a single entity that can be reliably reproduced across accounts, regions, environments, etc.
-
-Using the `values` attribute of [stack](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#stack) and [unit](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#unit) configuration blocks allows you to pass down configuration to units with granular control.
-
-For example, consider this portion of the [prod/us-east-1/stateful-lambda-service/terragrunt.stack.hcl](prod/us-east-1/stateful-lambda-service/terragrunt.stack.hcl) file:
-
-```hcl
-unit "lambda_service" {
-  // You'll typically want to pin this to a particular version of your catalog repository.
-  // e.g.
-  // source = "github.com/acme/terragrunt-infrastructure-catalog//units/lambda-stateful-service?ref=v0.1.0"
-  //
-  // If you are using a private catalog, you may want to use an SSH source URL instead:
-  // source = "git::git@github.com:acme/terragrunt-infrastructure-catalog.git//units/lambda-stateful-service"
-  source = "github.com/gruntwork-io/terragrunt-infrastructure-catalog-example//units/js-lambda-stateful-service"
-
-  path = "service"
-
-  values = {
-    // This version here is used as the version passed down to the unit
-    // to use when fetching the OpenTofu/Terraform module.
-    version = "main"
-
-    name = local.name
-
-    // Required inputs
-    runtime    = "nodejs22.x"
-    source_dir = "./src"
-    handler    = "index.handler"
-    zip_file   = "handler.zip"
-
-    // Optional inputs
-    memory  = 128
-    timeout = 3
-  }
-
-  // Stacks dependencies wire cross-unit relationships in the stack file via unit.<name>.path
-  autoinclude {
-    dependency "role" {
-      config_path = unit.role.path
-
-      mock_outputs = {
-        arn = "arn:aws:iam::123456789012:role/lambda-iam-role-to-dynamodb"
-      }
-    }
-
-    dependency "dynamodb_table" {
-      config_path = unit.db.path
-
-      mock_outputs = {
-        name = "dynamodb-table"
-      }
-    }
-  }
-}
-```
-
-Here, you can see that the `values` attribute is setting exactly the values that are unique to the `lambda_service` unit in the context of the `stateful-lambda-service` stack, including the `version` of the OpenTofu module it uses.
-
-### Declaring dependencies between units
-
-The `lambda_service` unit needs the IAM `role` and DynamoDB `db` units to exist before it can be deployed, and it reads their outputs at runtime. Rather than hand-writing the relative paths to those units, this repository declares the dependencies directly in the stack file using an [`autoinclude`](https://terragrunt.gruntwork.io/docs/reference/hcl/blocks/#autoinclude) block:
-
-- `config_path = unit.role.path` resolves to the generated directory of the `role` unit, so you never compute relative paths like `../roles/lambda-iam-role-to-dynamodb` by hand. If you rename or relocate a unit, the reference follows it automatically.
-- `mock_outputs` provide placeholder values so that a `plan` succeeds before the dependencies have been applied.
-
-When you run `terragrunt stack generate`, Terragrunt writes each declared dependency into a `terragrunt.autoinclude.hcl` file next to the generated unit, then merges it into that unit whenever the unit is run. As a result, the catalog units stay free of any knowledge about where their dependencies live: the `js-lambda-stateful-service` unit simply consumes `dependency.role.outputs.arn`, and the stack decides which `role` unit satisfies that dependency.
-
-This is the [stacks dependencies](https://terragrunt.gruntwork.io/docs/features/stacks/explicit/#declaring-dependencies-between-units) feature, which is enabled by default in Terragrunt `v1.1.0` and later.
-
-## What to do with `.terraform.lock.hcl` files
-
-When you run `terragrunt` commands you may find that `.terraform.lock.hcl` files are created in your working directories.
-
-These files are intentionally not committed to this example repository, but definitely should be in your own repositories!
-
-They help make sure that your IaC results in reproducible infrastructure. For more on this, read [Lock File Handling docs](https://docs.terragrunt.com/features/units/lock-files/).
-
-## How to get help
-
-If you need help troubleshooting usage of this repository, or Terragrunt in general, check out the [Support docs](https://terragrunt.gruntwork.io/docs/community/support/).
